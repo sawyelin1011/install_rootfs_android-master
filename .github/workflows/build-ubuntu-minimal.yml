@@ -13,7 +13,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static busybox wget xz-utils
 
       - name: Download
-        run: wget -q -O rootfs.tar.xz https://cdimage.ubuntu.com/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-core-arm64.tar.gz
+        run: wget -q -O rootfs.tar.xz https://cdimage.ubuntu.com/ubuntu-base/releases/22.04.5/release/ubuntu-base-22.04.5-base-arm64.tar.gz
 
       - name: Extract
         run: mkdir -p rootfs && cd rootfs && sudo tar -xpf ../rootfs.tar.xz --numeric-owner

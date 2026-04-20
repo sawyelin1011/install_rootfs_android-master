@@ -38,7 +38,7 @@ jobs:
           elif [ "${{ github.event.inputs.distro }}" = "kali-minimal" ]; then
             wget -q -O rootfs.tar.xz https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-minimal.tar.xz
           elif [ "${{ github.event.inputs.distro }}" = "ubuntu" ]; then
-            wget -q -O rootfs.tar.xz https://cdimage.ubuntu.com/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-core-arm64.tar.gz
+            wget -q -O rootfs.tar.xz https://cdimage.ubuntu.com/ubuntu-base/releases/22.04.5/release/ubuntu-base-22.04.5-base-arm64.tar.gz
           fi
 
       - name: Extract
