@@ -56,18 +56,18 @@ jobs:
 
       - name: Configure Base
         run: |
-          sudo chroot rootfs /bin/sh -c "apt-get update -qq"
-          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server net-tools"
+          sudo chroot rootfs /bin/sh -c "apt-get update --allow-insecure-repositories -qq || true"
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y -qq openssh-server net-tools"
 
       - name: Add Network Tools
         if: github.event.inputs.build_type == 'standard' || github.event.inputs.build_type == 'full'
         run: |
-          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nmap netcat-openbsd iproute2 tcpdump dnsutils curl wget"
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y -qq nmap netcat-openbsd iproute2 tcpdump dnsutils curl wget"
 
       - name: Add Full Plugins
         if: github.event.inputs.build_type == 'full'
         run: |
-          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io tigervnc-standalone-server x11vnc"
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y -qq docker.io tigervnc-standalone-server x11vnc"
 
       - name: Configure SSH
         run: |

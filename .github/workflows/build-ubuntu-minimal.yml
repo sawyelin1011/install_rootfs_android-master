@@ -26,8 +26,8 @@ jobs:
           echo "nameserver 1.1.1.1" > dns.conf
           echo "nameserver 8.8.8.8" >> dns.conf
           sudo cp dns.conf rootfs/etc/resolv.conf
-          sudo chroot rootfs /bin/sh -c "apt-get update -qq"
-          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server net-tools"
+          sudo chroot rootfs /bin/sh -c "apt-get update --allow-insecure-repositories -qq || true"
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y -qq openssh-server net-tools"
           sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' rootfs/etc/ssh/sshd_config
           sudo sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' rootfs/etc/ssh/sshd_config
           sudo chroot rootfs /bin/sh -c "echo 'root:toor' | chpasswd"
