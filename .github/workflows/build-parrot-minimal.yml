@@ -1,0 +1,43 @@
+name: Build Parrot Minimal
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static busybox wget xz-utils
+
+      - name: Download
+        run: wget -q -O rootfs.tar.xz http://mirror.math.princeton.edu/pub/parrot/iso/5.3/Parrot-rootfs-5.3_arm64.tar.xz
+
+      - name: Extract
+        run: mkdir -p rootfs && cd rootfs && sudo tar -xpf ../rootfs.tar.xz --numeric-owner
+
+      - name: Setup QEMU
+        run: sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/ || true
+
+      - name: Configure
+        run: |
+          echo "nameserver 1.1.1.1" > dns.conf
+          echo "nameserver 8.8.8.8" >> dns.conf
+          sudo cp dns.conf rootfs/etc/resolv.conf
+          sudo chroot rootfs /bin/sh -c "apt-get update -qq"
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server net-tools"
+          sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' rootfs/etc/ssh/sshd_config
+          sudo sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' rootfs/etc/ssh/sshd_config
+          sudo chroot rootfs /bin/sh -c "echo 'root:toor' | chpasswd"
+          sudo chroot rootfs /bin/sh -c "mkdir -p /run/sshd"
+
+      - name: Compress
+        run: sudo tar -cJf ylstackos-parrot-minimal-arm64.tar.xz -C rootfs .
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ylstackos-parrot-minimal
+          path: ylstackos-parrot-minimal-arm64.tar.xz

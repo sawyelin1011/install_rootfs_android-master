@@ -1,0 +1,102 @@
+name: Build YLStackOS Prebuilt
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'minimal'
+        type: choice
+        options:
+          - minimal
+          - standard
+          - full
+      distro:
+        description: 'Distribution'
+        required: true
+        default: 'parrot'
+        type: choice
+        options:
+          - parrot
+          - kali
+          - ubuntu
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static busybox wget xz-utils
+
+      - name: Download Rootfs
+        run: |
+          DistroVar="${{ github.event.inputs.distro }}"
+          if [ "$DistroVar" = "parrot" ]; then
+            wget -q -O rootfs.tar.xz http://mirror.math.princeton.edu/pub/parrot/iso/5.3/Parrot-rootfs-5.3_arm64.tar.xz
+          elif [ "$DistroVar" = "kali" ]; then
+            wget -q -O rootfs.tar.xz https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-minimal.tar.xz
+          else
+            wget -q -O rootfs.tar.xz https://cdimage.ubuntu.com/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-core-arm64.tar.gz
+          fi
+
+      - name: Extract
+        run: mkdir -p rootfs && cd rootfs && sudo tar -xpf ../rootfs.tar.xz --numeric-owner
+
+      - name: Setup QEMU
+        run: sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/ || true
+
+      - name: Configure DNS
+        run: |
+          echo "nameserver 1.1.1.1" > dns.conf
+          echo "nameserver 8.8.8.8" >> dns.conf
+          sudo cp dns.conf rootfs/etc/resolv.conf
+
+      - name: Configure Base
+        run: |
+          sudo chroot rootfs /bin/sh -c "apt-get update -qq"
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server net-tools"
+
+      - name: Add Network Tools
+        if: github.event.inputs.build_type == 'standard' || github.event.inputs.build_type == 'full'
+        run: |
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nmap netcat-openbsd iproute2 tcpdump dnsutils curl wget"
+
+      - name: Add Full Plugins
+        if: github.event.inputs.build_type == 'full'
+        run: |
+          sudo chroot rootfs /bin/sh -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io tigervnc-standalone-server x11vnc"
+
+      - name: Configure SSH
+        run: |
+          sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' rootfs/etc/ssh/sshd_config
+          sudo sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' rootfs/etc/ssh/sshd_config
+          sudo chroot rootfs /bin/sh -c "echo 'root:toor' | chpasswd"
+          sudo chroot rootfs /bin/sh -c "mkdir -p /run/sshd"
+
+      - name: Fix Groups
+        run: |
+          sudo chroot rootfs /bin/sh -c "groupadd -g 3003 aid_inet 2>/dev/null || true"
+          sudo chroot rootfs /bin/sh -c "groupadd -g 3004 aid_net_raw 2>/dev/null || true"
+          sudo chroot rootfs /bin/sh -c "usermod -G 3003 -a root 2>/dev/null || true"
+
+      - name: Add Update Script
+        if: github.event.inputs.build_type == 'full'
+        run: |
+          printf '%s\n' '#!/bin/sh' 'apt-get update -qq' 'DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq' 'apt-get autoremove -y -qq' 'apt-get clean' > update.sh
+          sudo cp update.sh rootfs/usr/local/bin/yls-update
+          sudo chmod +x rootfs/usr/local/bin/yls-update
+
+      - name: Compress
+        run: |
+          DISTRO=${{ github.event.inputs.distro }}
+          TYPE=${{ github.event.inputs.build_type }}
+          sudo tar -cJf ylstackos-${DISTRO}-${TYPE}-arm64.tar.xz -C rootfs .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ylstackos-${{ github.event.inputs.distro }}-${{ github.event.inputs.build_type }}
+          path: ylstackos-${{ github.event.inputs.distro }}-${{ github.event.inputs.build_type }}-arm64.tar.xz

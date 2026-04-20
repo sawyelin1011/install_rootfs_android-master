@@ -1,0 +1,89 @@
+name: Build YLStackOS Rootfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      distro:
+        description: 'Distribution'
+        required: true
+        default: 'parrot'
+        type: choice
+        options:
+          - parrot
+          - kali-full
+          - kali-minimal
+          - ubuntu
+      ssh_password:
+        description: 'SSH Root Password'
+        required: true
+        default: 'toor'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static busybox wget xz-utils
+
+      - name: Download Rootfs
+        run: |
+          if [ "${{ github.event.inputs.distro }}" = "parrot" ]; then
+            wget -q -O rootfs.tar.xz http://mirror.math.princeton.edu/pub/parrot/iso/5.3/Parrot-rootfs-5.3_arm64.tar.xz
+          elif [ "${{ github.event.inputs.distro }}" = "kali-full" ]; then
+            wget -q -O rootfs.tar.xz https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-full.tar.xz
+          elif [ "${{ github.event.inputs.distro }}" = "kali-minimal" ]; then
+            wget -q -O rootfs.tar.xz https://kali.download/nethunter-images/current/rootfs/kalifs-arm64-minimal.tar.xz
+          elif [ "${{ github.event.inputs.distro }}" = "ubuntu" ]; then
+            wget -q -O rootfs.tar.xz https://cdimage.ubuntu.com/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-core-arm64.tar.gz
+          fi
+
+      - name: Extract
+        run: |
+          mkdir -p rootfs
+          cd rootfs
+          sudo tar -xpf ../rootfs.tar.xz --numeric-owner
+
+      - name: Setup QEMU
+        run: |
+          sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/ 2>/dev/null || true
+
+      - name: Configure System
+        run: |
+          PASSWORD="${{ github.event.inputs.ssh_password }}"
+          sudo chroot rootfs /bin/sh -c "
+            echo 'nameserver 1.1.1.1' > /etc/resolv.conf
+            echo 'nameserver 8.8.8.8' >> /etc/resolv.conf
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-client openssh-server net-tools nmap netcat-openbsd iproute2 tcpdump dnsutils curl wget
+            sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+            sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            echo 'root:$PASSWORD' | chpasswd
+            mkdir -p /run/sshd
+            groupadd -g 3003 aid_inet 2>/dev/null || true
+            groupadd -g 3004 aid_net_raw 2>/dev/null || true
+            usermod -G 3003 -a root 2>/dev/null || true
+          "
+
+      - name: Add Update Script
+        run: |
+          echo '#!/bin/sh' > update-script.sh
+          echo 'apt-get update -qq' >> update-script.sh
+          echo 'DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq' >> update-script.sh
+          echo 'apt-get autoremove -y -qq' >> update-script.sh
+          echo 'apt-get clean' >> update-script.sh
+          sudo cp update-script.sh rootfs/usr/local/bin/yls-update
+          sudo chmod +x rootfs/usr/local/bin/yls-update
+
+      - name: Compress
+        run: |
+          sudo tar -cJf ylstackos-${{ github.event.inputs.distro }}-arm64.tar.xz -C rootfs .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ylstackos-${{ github.event.inputs.distro }}-arm64
+          path: ylstackos-${{ github.event.inputs.distro }}-arm64.tar.xz
